@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>짝꿍 그림 마법사</title>
+<style>
+:root{
+  --bg:#fdf6ee; --card:#ffffff; --ink:#3a3a3a; --accent:#ff8a65;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100%;padding:16px}
+h1{text-align:center;font-size:1.4rem;margin:8px 0 4px}
+p.sub{text-align:center;color:#888;margin:0 0 18px;font-size:.9rem}
+#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:640px;margin:0 auto}
+@media(max-width:480px){#grid{grid-template-columns:repeat(2,1fr)}}
+.tile{border:none;border-radius:14px;padding:10px 6px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform .15s}
+.tile:active{transform:scale(.95)}
+.tile svg{width:100%;height:54px}
+.tile span{font-size:.8rem;font-weight:600}
+#puzzle{max-width:520px;margin:0 auto;display:none}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.topbar button{background:#eee;border:none;border-radius:8px;padding:8px 12px;font-size:.85rem;cursor:pointer}
+#stage{position:relative;background:#fff;border-radius:16px;box-shadow:0 3px 10px rgba(0,0,0,.1);overflow:hidden;touch-action:none}
+#stage svg,#stage canvas,#answerSvg{position:absolute;top:0;height:100%}
+#leftSvg{left:0;width:50%}
+#stage canvas{right:0;width:50%;background:transparent}
+#answerSvg{right:0;width:50%;opacity:0;pointer-events:none;transition:opacity .3s}
+#answerSvg.show{opacity:.45}
+.midline{position:absolute;top:0;left:50%;width:0;height:100%;border-left:2px dashed #bbb;z-index:5}
+.controls{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+.controls button{border:none;border-radius:20px;padding:10px 18px;font-size:.9rem;font-weight:600;cursor:pointer;color:#fff}
+#btnAnswer{background:#26a69a}
+#btnClear{background:#ef5350}
+#btnUndo{background:#ffa726}
+#btnDone{background:#66bb6a}
+#btnSave{background:#7e57c2}
+.grid-bg{stroke:#eee;stroke-width:1}
+</style>
+</head>
+<body>
+<h1>🧙 짝꿍 그림 마법사</h1>
+<p class="sub">왼쪽 그림을 보고 똑같은 모양으로 오른쪽을 완성해 보세요</p>
+
+<div id="grid"></div>
+
+<div id="puzzle">
+  <div class="topbar">
+    <button onclick="showGrid()">← 목록으로</button>
+    <span style="width:60px"></span>
+    <span style="width:60px"></span>
+  </div>
+  <div id="stage" style="height:370px">
+    <svg id="leftSvg" viewBox="0 0 140 200" preserveAspectRatio="none"></svg>
+    <canvas id="drawCanvas"></canvas>
+    <svg id="answerSvg" viewBox="0 0 140 200" preserveAspectRatio="none"></svg>
+    <div class="midline"></div>
+  </div>
+  <div id="palette" style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px">
+    <div id="swatches" style="display:flex;gap:6px"></div>
+    <span style="width:10px"></span>
+    <button id="modeDraw" onclick="setMode('draw')" style="border:2px solid #333;border-radius:20px;padding:6px 12px;background:#fff;font-size:.85rem;cursor:pointer">✏️ 선</button>
+    <button id="modeFill" onclick="setMode('color')" style="border:2px solid #ccc;border-radius:20px;padding:6px 12px;background:#fff;font-size:.85rem;cursor:pointer">🖍️ 색칠</button>
+  </div>
+  <div class="controls">
+    <button id="btnAnswer" onclick="toggleAnswer()" style="display:none">정답 보기</button>
+    <button id="btnLock" onclick="showPinBox()" style="background:#90a4ae">🔒 선생님</button>
+    <span id="pinBox" style="display:none;align-items:center;gap:4px">
+      <input id="pinInput" type="password" inputmode="numeric" maxlength="4" placeholder="암호" onkeydown="if(event.key==='Enter')checkPin()" style="width:60px;padding:8px;border-radius:10px;border:1px solid #ccc">
+      <button onclick="checkPin()" style="background:#78909c">확인</button>
+    </span>
+    <button id="btnUndo" onclick="undoLast()">↩️ 하나 지우기</button>
+    <button id="btnClear" onclick="clearCanvas()">🗑️ 전체 지우기</button>
+    <button id="btnSave" onclick="saveDrawing()">💾 저장</button>
+    <span id="saveStatus" style="font-size:.8rem;color:#777"></span>
+    <button id="btnDone" onclick="finishPuzzle()">✅ 완성!</button>
+  </div>
+</div>
+
+<script>
+const puzzles = [
+ {n:"아이스크림",c:"#b2ebf2",native:true,d:"M140,180 L120,180 L120,160 M140,160 L80,160 L80,140 L80,60 L100,20 L140,20 M80,60 L100,80 L120,60 L140,100"},
+ {n:"주머니",c:"#ffccbc",native:true,d:"M140,180 L80,180 L40,140 L80,60 L100,60 L100,20 L140,20"},
+ {n:"나무",c:"#bbdefb",native:true,d:"M140,180 L120,180 L120,140 M140,140 L60,140 L100,100 L80,100 L120,60 L100,60 L140,20"},
+ {n:"배",c:"#ffe0b2",native:true,d:"M140,180 L80,180 L20,120 L140,120 M80,120 L140,20"},
+ {n:"집",c:"#f8bbd0",native:true,d:"M140,180 L40,180 M60,140 L100,140 M60,120 L100,120 M60,100 L100,100 M40,180 L40,80 M60,100 L60,140 M80,100 L80,140 M100,100 L100,140 M20,80 L140,80 M20,80 L40,20 M40,20 L140,20 M120,180 L120,120 L140,120"},
+ {n:"전화기",c:"#fff9c4",native:true,d:"M140,180 L60,180 L60,140 L100,80 L140,80 M120,80 L120,60 M140,60 L100,60 L80,80 L40,80 L40,40 L60,20 L140,20 M140,160 A30,30 0 0,1 140,100"},
+ {n:"셔츠",c:"#c8e6c9",native:true,d:"M140,180 L80,180 L80,100 L60,80 L100,40 L120,60 L140,60"},
+ {n:"나비",c:"#e1bee7",native:true,d:"M140,140 L120,180 L80,180 L140,140 M140,140 L80,140 L20,80 L100,40 L140,40 L120,20 L100,20 M97,20 A3,3 0 1,0 103,20 A3,3 0 1,0 97,20 M120,100 L120,60 L100,60 L60,80 L100,120 L120,100"},
+ {n:"성",c:"#ffe082",native:true,d:"M140,180 L20,180 L20,120 L60,120 L60,140 L100,140 L100,120 L140,120 M120,120 L120,60 L140,60 M120,60 L140,20 M80,100 L60,60 L40,100 L80,100 M40,100 L40,120 M120,80 L100,40 L80,80 L120,80 M80,80 L80,140"},
+ {n:"왕관",c:"#c5cae9",native:true,d:"M140,160 L20,160 L20,40 L80,100 L140,40 M140,40 A10,10 0 0,1 140,20 M20,20 A10,10 0 1,0 20,40 A10,10 0 1,0 20,20"},
+ {n:"부엉이",c:"#d7ccc8",native:true,dots:[[100,80,10]],d:"M140,160 L100,160 L60,120 L60,40 L80,20 L140,20 M140,60 L120,40 L60,60 L40,120 L60,100 M80,80 A20,20 0 1,0 120,80 A20,20 0 1,0 80,80 M100,180 L120,180 L110,160 Z M140,100 L130,120 L140,130"},
+ {n:"돼지",c:"#f8bbd0",native:true,dots:[[80,80,5]],d:"M140,180 L80,180 L20,140 L20,100 L40,60 L100,40 L140,40 M140,160 L120,140 M140,140 L100,140 L100,100 L120,80 L140,80 M120,120 L120,100 M60,40 L40,60 M40,60 L40,20 L100,40 M60,40 L74.64,48.45"},
+ {n:"여자아이",c:"#ffe0b2",native:true,cols:6,rows:14,dots:[[60,180,3]],ellipses:[[100,80,5,10]],d:"M110,260 L90,260 M110,260 A10,10 0 0,0 90,260 M110,260 L110,200 M120,200 L80,200 L100,180 L120,180 M100,180 L100,120 L60,180 M120,120 L60,120 L40,100 L40,160 L20,160 L40,100 L40,40 L60,20 L120,20 L40,80 M110,90 Q116,110 125,100"},
+ {n:"세탁기",c:"#d1c4e9",native:true,cols:6,rows:14,d:"M120,240 L40,240 L40,40 L120,40 M120,60 L40,60 M60,60 L60,40 M80,60 L80,40 M80,60 L60,60 M120,220 A60,60 0 0,1 120,100"},
+ {n:"빗자루",c:"#ffccbc",native:true,cols:6,rows:14,d:"M120,260 L20,260 L40,220 L120,220 M40,260 L80,220 M80,260 L100,220 M40,220 L110,180 L120,180 M110,180 L110,20 L120,20"},
+ {n:"남자아이",c:"#c5e1a5",native:true,cols:6,rows:14,dots:[[100,100,4]],d:"M100,280 L74,280 Q85,252 100,260 M100,280 L100,220 M120,220 L80,220 L80,140 L40,180 L80,200 Q70,210 80,220 M120,200 L110,160 L120,140 L100,160 L80,140 L120,140 M80,140 L80,80 M60,80 L120,80 M60,80 L60,60 L120,60 M80,60 L100,20 L120,20 M80,120 Q65,110 80,100 M110,126 Q112,135 120,131 M120,100 Q104,110 120,120"},
+];
+
+const grid = document.getElementById('grid');
+puzzles.forEach((p,i)=>{
+  const btn=document.createElement('button');
+  btn.className='tile';
+  btn.style.background=p.c;
+  btn.onclick=()=>openPuzzle(i);
+  const vb = p.native ? `0 0 ${(p.cols||7)*20} ${(p.rows||10)*20}` : '0 0 160 220';
+  btn.innerHTML=`<svg viewBox="${vb}"><path d="${p.d}" fill="none" stroke="#333" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>${(p.dots||[]).map(d=>`<circle cx="${d[0]}" cy="${d[1]}" r="${d[2]}" fill="#333"/>`).join('')}${(p.ellipses||[]).map(e=>`<ellipse cx="${e[0]}" cy="${e[1]}" rx="${e[2]}" ry="${e[3]}" fill="#333"/>`).join('')}</svg>`;
+  grid.appendChild(btn);
+});
+
+const UNIT=20; let COLS=7, ROWS=10; // 반쪽 기준 (COLS*20)x(ROWS*20) viewBox, 그림별로 COLS/ROWS를 다르게 쓸 수 있음
+const LEGACY_SX=140/160, LEGACY_SY=200/220; // 기존(비-native) 좌표계(160x220)를 새 격자에 맞춰 축척
+let ctx, drawing=false, last=null, history=[], finished=false;
+const MAX_HISTORY=30;
+const canvas=document.getElementById('drawCanvas');
+
+function gridPatternDefs(){
+  let lines='';
+  for(let c=0;c<=COLS;c++) lines+=`<line x1="${c*UNIT}" y1="0" x2="${c*UNIT}" y2="${ROWS*UNIT}" stroke="#eadfca" stroke-width="1"/>`;
+  for(let r=0;r<=ROWS;r++) lines+=`<line x1="0" y1="${r*UNIT}" x2="${COLS*UNIT}" y2="${r*UNIT}" stroke="#eadfca" stroke-width="1"/>`;
+  return lines;
+}
+
+function shapeMarkup(p, strokeColor){
+  const path=`<path d="${p.d}" fill="none" stroke="${strokeColor}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const dots=(p.dots||[]).map(d=>`<circle cx="${d[0]}" cy="${d[1]}" r="${d[2]}" fill="${strokeColor}"/>`).join('');
+  const ellipses=(p.ellipses||[]).map(e=>`<ellipse cx="${e[0]}" cy="${e[1]}" rx="${e[2]}" ry="${e[3]}" fill="${strokeColor}"/>`).join('');
+  return p.native ? path+dots+ellipses : `<g transform="scale(${LEGACY_SX},${LEGACY_SY})">${path}</g>`;
+}
+
+function resizeCanvas(){
+  const rect=canvas.getBoundingClientRect();
+  canvas.width=rect.width; canvas.height=rect.height;
+  ctx=canvas.getContext('2d');
+  ctx.lineWidth=5; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle=currentColor;
+  history=[];
+  drawGridOnCanvas();
+}
+
+function drawGridOnCanvas(){
+  if(!ctx) return;
+  const sx=canvas.width/(COLS*UNIT), sy=canvas.height/(ROWS*UNIT);
+  ctx.save();
+  ctx.strokeStyle='#eadfca'; ctx.lineWidth=1;
+  for(let c=0;c<=COLS;c++){ ctx.beginPath(); ctx.moveTo(c*UNIT*sx,0); ctx.lineTo(c*UNIT*sx,canvas.height); ctx.stroke(); }
+  for(let r=0;r<=ROWS;r++){ ctx.beginPath(); ctx.moveTo(0,r*UNIT*sy); ctx.lineTo(canvas.width,r*UNIT*sy); ctx.stroke(); }
+  ctx.restore();
+  ctx.strokeStyle='#333'; ctx.lineWidth=5;
+}
+
+const TEACHER_PIN='0784';
+let answerUnlocked=false;
+
+function resetStageLayout(){
+  finished=false;
+  answerUnlocked=false;
+  const leftSvg=document.getElementById('leftSvg'), ans=document.getElementById('answerSvg');
+  leftSvg.style.display=''; ans.style.display='';
+  document.querySelector('.midline').style.display='';
+  canvas.style.left=''; canvas.style.right='0'; canvas.style.width='50%';
+  document.getElementById('btnAnswer').style.display='none';
+  document.getElementById('btnLock').style.display='';
+  document.getElementById('pinBox').style.display='none';
+  document.getElementById('pinInput').value='';
+  document.getElementById('btnDone').textContent='✅ 완성!';
+  document.getElementById('btnDone').onclick=finishPuzzle;
+}
+
+function showPinBox(){
+  document.getElementById('pinBox').style.display='inline-flex';
+  document.getElementById('pinInput').focus();
+}
+
+function checkPin(){
+  const val=document.getElementById('pinInput').value;
+  if(val===TEACHER_PIN){
+    answerUnlocked=true;
+    document.getElementById('btnAnswer').style.display='';
+    document.getElementById('btnLock').style.display='none';
+    document.getElementById('pinBox').style.display='none';
+  }else{
+    document.getElementById('pinInput').value='';
+    document.getElementById('pinInput').placeholder='틀렸어요';
+  }
+}
+
+let currentIndex=0;
+function openPuzzle(i){
+  currentIndex=i;
+  const p=puzzles[i];
+  setMode('draw');
+  resetStageLayout();
+  ROWS = p.rows || 10;
+  COLS = p.cols || 7;
+  const vbW = COLS*UNIT, vbH = ROWS*UNIT;
+  const leftSvg=document.getElementById('leftSvg'), ans=document.getElementById('answerSvg');
+  leftSvg.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+  ans.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+  leftSvg.innerHTML=`${gridPatternDefs()}${shapeMarkup(p,'#333')}`;
+  ans.innerHTML=`${gridPatternDefs()}<g transform="translate(${COLS*UNIT},0) scale(-1,1)">${shapeMarkup(p,'#e53935')}</g>`;
+  ans.classList.remove('show');
+  document.getElementById('btnAnswer').textContent='정답 보기';
+  document.getElementById('grid').style.display='none';
+  document.getElementById('puzzle').style.display='block';
+  const stage=document.getElementById('stage');
+  const halfWidthPx = stage.getBoundingClientRect().width/2;
+  stage.style.height = Math.round(halfWidthPx/COLS*ROWS)+'px';
+  setTimeout(()=>{ resizeCanvas(); clearCanvas(); },0);
+}
+
+function showGrid(){
+  document.getElementById('puzzle').style.display='none';
+  document.getElementById('grid').style.display='grid';
+}
+
+function finishPuzzle(){
+  if(!ctx || finished) return;
+  const leftSvg=document.getElementById('leftSvg');
+  const svgStr=new XMLSerializer().serializeToString(leftSvg);
+  const svgUrl='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svgStr)));
+  const img=new Image();
+  img.onload=()=>{
+    const w=canvas.width, h=canvas.height;
+    const rightSnapshot=ctx.getImageData(0,0,w,h);
+    canvas.width=w*2; canvas.height=h;
+    canvas.style.left='0'; canvas.style.right='auto'; canvas.style.width='100%';
+    document.getElementById('leftSvg').style.display='none';
+    document.getElementById('answerSvg').style.display='none';
+    document.querySelector('.midline').style.display='none';
+    document.getElementById('btnAnswer').style.display='none';
+    document.getElementById('btnLock').style.display='none';
+    document.getElementById('pinBox').style.display='none';
+    ctx=canvas.getContext('2d');
+    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0,w,h);
+    ctx.putImageData(rightSnapshot,w,0);
+    ctx.lineWidth=5; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle=currentColor;
+    history=[];
+    finished=true;
+    setMode('color');
+    document.getElementById('btnDone').textContent='🔄 다시 풀기';
+    document.getElementById('btnDone').onclick=()=>openPuzzle(currentIndex);
+  };
+  img.src=svgUrl;
+}
+
+function toggleAnswer(){
+  const ans=document.getElementById('answerSvg');
+  ans.classList.toggle('show');
+  document.getElementById('btnAnswer').textContent = ans.classList.contains('show') ? '정답 숨기기' : '정답 보기';
+}
+
+function clearCanvas(){
+  if(!ctx) return;
+  if(finished){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  }else{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawGridOnCanvas();
+  }
+  history=[];
+}
+
+function pushHistory(){
+  if(!ctx) return;
+  try{
+    history.push(ctx.getImageData(0,0,canvas.width,canvas.height));
+    if(history.length>MAX_HISTORY) history.shift();
+  }catch(e){}
+}
+
+function undoLast(){
+  if(!ctx || history.length===0) return;
+  const imgData=history.pop();
+  ctx.putImageData(imgData,0,0);
+}
+
+function setSaveStatus(msg, ms){
+  const el=document.getElementById('saveStatus');
+  el.textContent = msg;
+  if(ms) setTimeout(()=>{ if(el.textContent===msg) el.textContent=''; }, ms);
+}
+
+async function saveDrawing(){
+  const btn=document.getElementById('btnSave');
+  btn.disabled = true;
+  setSaveStatus('준비 중...');
+  try{
+    if(typeof claude === 'undefined' || !claude.use){
+      setSaveStatus('이 화면에서는 저장 기능을 쓸 수 없어요.', 4000);
+      return;
+    }
+    const downloads = await claude.use('downloads');
+    if(!downloads){
+      setSaveStatus('이 화면에서는 저장 기능을 쓸 수 없어요.', 4000);
+      return;
+    }
+    let blob;
+    if(finished){
+      blob = await new Promise(res=>canvas.toBlob(res,'image/png'));
+    }else{
+      const leftSvg=document.getElementById('leftSvg');
+      const svgStr=new XMLSerializer().serializeToString(leftSvg);
+      const svgUrl='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svgStr)));
+      const img=new Image();
+      await new Promise((resolve,reject)=>{ img.onload=resolve; img.onerror=reject; img.src=svgUrl; });
+      const w=canvas.width, h=canvas.height;
+      const out=document.createElement('canvas');
+      out.width=w*2; out.height=h;
+      const octx=out.getContext('2d');
+      octx.fillStyle='#ffffff';
+      octx.fillRect(0,0,out.width,out.height);
+      octx.drawImage(img,0,0,w,h);
+      octx.drawImage(canvas,w,0,w,h);
+      blob = await new Promise(res=>out.toBlob(res,'image/png'));
+    }
+    if(!blob){ setSaveStatus('이미지를 만들지 못했어요.', 4000); return; }
+    const result = await downloads.save({filename:'symmetry-drawing.png', data:blob});
+    setSaveStatus(result && result.status==='saved' ? '저장됐어요! ✅' : '전달됐어요! ✅', 3000);
+  }catch(e){
+    console.error('save error:', e);
+    if(e && e.code==='declined'){ setSaveStatus('저장을 취소했어요.', 3000); }
+    else { setSaveStatus('저장 실패: '+(e&&(e.message||e.code)||'알 수 없는 오류'), 6000); }
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+function getPos(e){
+  const rect=canvas.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return {x:t.clientX-rect.left, y:t.clientY-rect.top};
+}
+function start(e){
+  pushHistory();
+  ctx.lineWidth = mode==='color' ? 20 : 5;
+  ctx.globalAlpha = mode==='color' ? 0.85 : 1;
+  ctx.strokeStyle = currentColor;
+  drawing=true; last=getPos(e); e.preventDefault();
+}
+function move(e){
+  if(!drawing) return;
+  const p=getPos(e);
+  ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+  last=p; e.preventDefault();
+}
+function end(){ drawing=false; if(ctx) ctx.globalAlpha=1; }
+
+canvas.addEventListener('pointerdown',start);
+canvas.addEventListener('pointermove',move);
+window.addEventListener('pointerup',end);
+canvas.addEventListener('touchstart',start,{passive:false});
+canvas.addEventListener('touchmove',move,{passive:false});
+window.addEventListener('touchend',end);
+window.addEventListener('resize',()=>{ if(document.getElementById('puzzle').style.display==='block'){ 
+  const img=ctx?ctx.getImageData(0,0,canvas.width,canvas.height):null;
+  resizeCanvas();
+}});
+
+// ---- 색칠하기 ----
+const PALETTE=['#333333','#e53935','#fb8c00','#fdd835','#43a047','#1e88e5','#8e24aa','#6d4c41'];
+let currentColor='#333333', mode='draw';
+const swatchesEl=document.getElementById('swatches');
+PALETTE.forEach((c,i)=>{
+  const b=document.createElement('button');
+  b.style.cssText=`width:26px;height:26px;border-radius:50%;background:${c};border:${i===0?'3px solid #000':'2px solid #ddd'};cursor:pointer;padding:0`;
+  b.dataset.color=c;
+  b.onclick=()=>{
+    currentColor=c;
+    [...swatchesEl.children].forEach(ch=>ch.style.border='2px solid #ddd');
+    b.style.border='3px solid #000';
+    if(ctx) ctx.strokeStyle=currentColor;
+  };
+  swatchesEl.appendChild(b);
+});
+function setMode(m){
+  mode=m;
+  document.getElementById('modeDraw').style.border = m==='draw' ? '2px solid #333' : '2px solid #ccc';
+  document.getElementById('modeFill').style.border = m==='color' ? '2px solid #333' : '2px solid #ccc';
+}
+function hexToRgba(hex){
+  const n=parseInt(hex.slice(1),16);
+  return [ (n>>16)&255, (n>>8)&255, n&255, 255 ];
+}
+function floodFill(x,y){
+  if(!ctx || x<0||y<0||x>=canvas.width||y>=canvas.height) return;
+  const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const data=img.data, w=canvas.width, h=canvas.height;
+  const idx=(px,py)=>(py*w+px)*4;
+  const start=idx(x,y);
+  const target=[data[start],data[start+1],data[start+2],data[start+3]];
+  const fill=hexToRgba(currentColor);
+  const match=(i)=>Math.abs(data[i]-target[0])+Math.abs(data[i+1]-target[1])+Math.abs(data[i+2]-target[2])+Math.abs(data[i+3]-target[3])<40;
+  if(match(start) && data[start]===fill[0]&&data[start+1]===fill[1]&&data[start+2]===fill[2]) return; // 이미 같은 색
+  // 어두운 선(윤곽선)을 클릭하면 채우지 않음
+  if(data[start]<120 && data[start+1]<120 && data[start+2]<120 && data[start+3]>150) return;
+  const stack=[[x,y]];
+  const visited=new Uint8Array(w*h);
+  while(stack.length){
+    const [cx,cy]=stack.pop();
+    if(cx<0||cy<0||cx>=w||cy>=h) continue;
+    const vi=cy*w+cx;
+    if(visited[vi]) continue;
+    const i=vi*4;
+    if(!match(i)) continue;
+    visited[vi]=1;
+    data[i]=fill[0]; data[i+1]=fill[1]; data[i+2]=fill[2]; data[i+3]=255;
+    stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+  }
+  ctx.putImageData(img,0,0);
+}
+</script>
+</body>
+</html>
