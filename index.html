@@ -80,6 +80,10 @@ p.sub{text-align:center;color:#888;margin:0 0 18px;font-size:.9rem}
 
 <script>
 const puzzles = [
+ {n:"축구공",c:"#c8e6c9",native:true,d:"M140,20 A80,80 0 0,0 140,180 M140,60 L110,80 L120,120 L140,120 M110,80 L84,44 M120,120 L84,156"},
+ {n:"야구공",c:"#ffcdd2",native:true,d:"M140,20 A80,80 0 0,0 140,180 M92,36 Q120,100 92,164 M101,62 L88,66 M105,81 L91,83 M106,100 L92,100 M105,119 L91,117 M101,138 L88,134"},
+ {n:"농구공",c:"#ffe0b2",native:true,d:"M140,20 A80,80 0 0,0 140,180 M60,100 L140,100 M84,44 Q116,100 84,156"},
+ {n:"배구공",c:"#bbdefb",native:true,d:"M140,20 A80,80 0 0,0 140,180 M140,100 Q108,96 84,44 M140,100 Q108,104 84,156 M140,64 Q122,60 106,26 M140,136 Q122,140 106,174"},
  {n:"아이스크림",c:"#b2ebf2",native:true,d:"M140,180 L120,180 L120,160 M140,160 L80,160 L80,140 L80,60 L100,20 L140,20 M80,60 L100,80 L120,60 L140,100"},
  {n:"주머니",c:"#ffccbc",native:true,d:"M140,180 L80,180 L40,140 L80,60 L100,60 L100,20 L140,20"},
  {n:"나무",c:"#bbdefb",native:true,d:"M140,180 L120,180 L120,140 M140,140 L60,140 L100,100 L80,100 L120,60 L100,60 L140,20"},
@@ -282,7 +286,6 @@ function setSaveStatus(msg, ms){
   el.textContent = msg;
   if(ms) setTimeout(()=>{ if(el.textContent===msg) el.textContent=''; }, ms);
 }
-
 async function saveDrawing(){
   const btn=document.getElementById('btnSave');
   btn.disabled = true;
